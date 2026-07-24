@@ -21,6 +21,7 @@
 #include "TString.h"
 #include "TVector3.h"
 #include <edm4hep/Constants.h>
+#include <Eigen/Dense>
 
 DECLARE_COMPONENT(AugmentClustersFCCee)
 
@@ -148,6 +149,12 @@ StatusCode AugmentClustersFCCee::initialize() {
   }
   showerShapeDecorations.push_back("mass");   // cluster invariant mass assuming massless constituents
   showerShapeDecorations.push_back("ncells"); // number of cells in cluster with E>0
+  showerShapeDecorations.push_back("shower_center_x");        // fs
+  showerShapeDecorations.push_back("shower_center_y");          // fs
+  showerShapeDecorations.push_back("shower_center_z");        // fs
+  showerShapeDecorations.push_back("principal_axis_x");      // fs
+  showerShapeDecorations.push_back("principal_axis_y");      // fs
+  showerShapeDecorations.push_back("principal_axis_z");      // fs
 
   k4FWCore::putCollectionParameter(m_outClusters.objKey(), edm4hep::labels::ShapeParameterNames, showerShapeDecorations,
                                    this);
@@ -201,13 +208,15 @@ StatusCode AugmentClustersFCCee::execute([[maybe_unused]] const EventContext& ev
   for (size_t i = 0; i < m_numLayers.size(); ++i) {
     numLayersTotal += m_numLayers[i];
   }
-
+  
   // loop over the clusters, clone them, and calculate the shape parameters to store with them
   for (const auto& cluster : *inClusters) {
     // clone original cluster
     auto newCluster = cluster.clone();
     outClusters->push_back(newCluster);
+    std::cout << "  Cluster with energy " << cluster.getEnergy() << " and " << cluster.hits_size() << " cells." << std::endl;
 
+    
     // loop over all cells to:
     // - calculate the cluster invariant mass
     // - calculate the energy deposited in each layer
@@ -216,8 +225,17 @@ StatusCode AugmentClustersFCCee::execute([[maybe_unused]] const EventContext& ev
     double E(0.0);
     TLorentzVector p4cl(0.0, 0.0, 0.0, 0.0);
     unsigned int nCells(0);
+    //std::vector<double> showerAxis(3, 0.0);
     std::vector<double> sumEnLayer(numLayersTotal, 0.);
     std::vector<double> maxCellEnergyInLayer(numLayersTotal, 0.);
+
+
+    std::vector<double> v3clW(3, 0.0); //fs
+    
+    
+    Eigen::Matrix3d C = Eigen::Matrix3d::Zero();
+    Eigen::Vector3d prAxis = Eigen::Vector3d::Zero();
+
     double phiMin = 9999.;
     double phiMax = -9999.;
     int module_id_Min = 9999;
@@ -256,6 +274,10 @@ StatusCode AugmentClustersFCCee::execute([[maybe_unused]] const EventContext& ev
 
         // compute phi and module of cell to determine min/max phi and module ID of cluster
         TVector3 v = TVector3(cell->getPosition().x, cell->getPosition().y, cell->getPosition().z);
+
+        v3clW[0] += cell->getPosition().x * eCell;  //fs
+        v3clW[1] += cell->getPosition().y * eCell;  //fs
+        v3clW[2] += cell->getPosition().z * eCell;  //fs
         double phi = v.Phi();
         if (phi < phiMin)
           phiMin = phi;
@@ -273,6 +295,120 @@ StatusCode AugmentClustersFCCee::execute([[maybe_unused]] const EventContext& ev
         nCells++;
       } // end of loop over cells
     } // end of loop over system / readout
+
+
+    v3clW[0] /= E; //fs
+    v3clW[1] /= E; //fs
+    v3clW[2] /= E; //fs
+
+    Eigen::Vector3d showerCenter(v3clW[0], v3clW[1], v3clW[2]);
+    
+    double w = 0;
+    Eigen::Vector3d showerAxis(v3clW[0], v3clW[1], v3clW[2]);
+    std::cout << "    (1) Shower Axis : " <<showerAxis[0] << " " << showerAxis[1] << " " << showerAxis[2] << std::endl;
+    //dd4hep::DDSegmentation::setMag(showerAxis,1.0);
+    showerAxis.normalize();
+    std::cout << "    (1.1) Shower Axis : " <<showerAxis[0] << " " << showerAxis[1] << " " << showerAxis[2] << std::endl;
+    double deltaPhi = 0.;
+    double deltaTheta = 0.;
+    double angle = 0.;
+    double m_maxAxisAngle = 20.0 * dd4hep::deg;
+
+    for (auto cell = newCluster.hits_begin(); cell != newCluster.hits_end(); cell++) { //fs
+    
+      double e2 = cell->getEnergy() * cell->getEnergy(); //fs
+      
+      C(0,0) += e2 * (cell->getPosition().x-v3clW[0]) * (cell->getPosition().x-v3clW[0]);
+      C(1,0) += e2 * (cell->getPosition().x-v3clW[0]) * (cell->getPosition().y-v3clW[1]);
+      C(2,0) += e2 * (cell->getPosition().x-v3clW[0]) * (cell->getPosition().z-v3clW[2]);
+
+      C(1,1) += e2 * (cell->getPosition().y-v3clW[1]) * (cell->getPosition().y-v3clW[1]);
+      C(1,2) += e2 * (cell->getPosition().y-v3clW[1]) * (cell->getPosition().z-v3clW[2]);
+
+      C(2,2) += e2 * (cell->getPosition().z-v3clW[2]) * (cell->getPosition().z-v3clW[2]);
+      w += e2;
+    }
+    C/=(w != 0 ? w : 1.0);
+
+    
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eigensolver(C);
+    if (eigensolver.info() != Eigen::Success) {
+        debug() << "Failed to compute Eigenvalues -> Can't determine shower axis" << endmsg;
+    }
+    else {
+         // don't use the principal axes if at least one of the 3 
+         // diagonal elements is 0
+ 
+         const Eigen::Vector3d& S=eigensolver.eigenvalues(); 
+         const Eigen::Matrix3d& U=eigensolver.eigenvectors();
+ 
+         const double epsilon = 1.E-6;
+ 
+         if ( std::abs(S[0]) >= epsilon && std::abs(S[1]) >= epsilon && std::abs(S[2]) >= epsilon ) { 
+         
+           //prAxis(showerAxis);
+           prAxis = showerAxis;
+           std::cout << "    principal Axis : " <<prAxis[0] << " " << prAxis[1] << " " << prAxis[2] << std::endl;
+           int iEigen = -1;
+           
+           for (int i=0;i<3;i++) {
+              Eigen::Vector3d tmpAxis=U.col(i);
+ 
+            // calculate the angle      
+              //double tmpAngle=Amg::angle(tmpAxis,showerAxis);
+              double tmpAngle = std::acos(tmpAxis.normalized().dot(showerAxis.normalized()));
+              
+              if ( tmpAngle > 90*dd4hep::deg ) { 
+                tmpAngle = 180*dd4hep::deg - tmpAngle;
+                tmpAxis = -tmpAxis;
+              }
+         
+              if ( iEigen == -1 || tmpAngle < angle ) {
+                iEigen = i;
+                angle = tmpAngle;
+                prAxis = tmpAxis;
+                std::cout << "iEigen : " << iEigen << "  angle : " << tmpAngle*(1./dd4hep::deg) <<  "   prAxis: " << prAxis[0] << " " << prAxis[1] << " " << prAxis[2] << std::endl;
+              }
+           }//end for loop     
+         
+           // calculate theta and phi angle differences
+           
+           //deltaPhi = CaloPhiRange::diff(showerAxis.phi(),prAxis.phi());
+           deltaPhi = std::remainder(std::atan2(showerAxis.y(), showerAxis.x()) -std::atan2(prAxis.y(), prAxis.x()),2.0 * M_PI);
+           
+           //
+           // 
+           // deltaTheta = showerAxis.theta() - prAxis.theta();
+           deltaTheta = std::acos(showerAxis.normalized().z()) - std::acos(prAxis.normalized().z());
+         
+           std::cout << "   deltaTheta (deg) : " << deltaTheta*(1./dd4hep::deg) << std::endl;
+           std::cout << "   deltaPhi (deg) : " << deltaPhi*(1./dd4hep::deg) << std::endl;
+           // check the angle
+           
+           if ( angle < m_maxAxisAngle ) {
+              showerAxis = prAxis;
+              std::cout << "    principal Direction (" << prAxis[0] << ", " 
+                   << prAxis[1] << ", " << prAxis[2] << ") deviates LESS than " << m_maxAxisAngle*(1./dd4hep::deg)
+                   << " deg from IP-to-ClusterCenter-axis (" << showerAxis[0] << ", "
+                   << showerAxis[1] << ", " << showerAxis[2] << ")"
+                  <<std::endl;
+           }
+           else 
+                  //ATH_MSG_DEBUG("principal Direction (" << prAxis[Amg::x] << ", " 
+                   //<< prAxis[Amg::y] << ", " << prAxis[Amg::z] << ") deviates more than " 
+                  // << m_maxAxisAngle*(1./deg) 
+                   //<< " deg from IP-to-ClusterCenter-axis (" << showerAxis[Amg::x] << ", "
+                   //<< showerAxis[Amg::y] << ", " << showerAxis[Amg::z] << ")");
+                   std::cout << "     principal Direction (" << prAxis[0] << ", " 
+                   << prAxis[1] << ", " << prAxis[2] << ") deviates MORE than " << m_maxAxisAngle*(1./dd4hep::deg)
+                   << " deg from IP-to-ClusterCenter-axis (" << showerAxis[0] << ", "
+                   << showerAxis[1] << ", " << showerAxis[2] << ")"
+                  <<std::endl;
+         }//end if std::abs(S)<epsilon
+         //else {
+           //ATH_MSG_DEBUG("Eigenvalues close to 0, do not use principal axis");
+         //}
+       }//end got eigenvalues else
 
     // any number close to two pi should do, because if a cluster contains
     // the -pi<->pi transition, phiMin should be close to -pi and phiMax close to pi
@@ -954,6 +1090,13 @@ StatusCode AugmentClustersFCCee::execute([[maybe_unused]] const EventContext& ev
     } // end of loop over system/readout
     newCluster.addToShapeParameters(p4cl.M());
     newCluster.addToShapeParameters(nCells);
+    newCluster.addToShapeParameters(showerCenter[0]);
+    newCluster.addToShapeParameters(showerCenter[1]);
+    newCluster.addToShapeParameters(showerCenter[2]);
+    newCluster.addToShapeParameters(prAxis[0]);
+    newCluster.addToShapeParameters(prAxis[1]);
+    newCluster.addToShapeParameters(prAxis[2]);
+
   } // end of loop over clusters
 
   return StatusCode::SUCCESS;
