@@ -2,7 +2,6 @@
 # Package: RecCaloCommon
 ################################################################################
 
-find_package(boost_timer REQUIRED)
 file(GLOB _sources src/*.cpp )
 
 gaudi_add_library(RecCaloCommon
@@ -27,6 +26,10 @@ install(TARGETS RecCaloCommon
 
 
 if(BUILD_TESTING)
+  # Boost is only needed by the test executables
+  find_package(boost_timer REQUIRED)
+  find_package(boost_unit_test_framework REQUIRED)
+
   gaudi_add_executable(IDMap_test.exe
     SOURCES tests/IDMap_test.cpp
     LINK DD4hep::DDCore Boost::timer
@@ -46,4 +49,11 @@ if(BUILD_TESTING)
     LINK DD4hep::DDCore k4FWCore::k4Interface k4FWCore::k4FWCore
     TEST)
   target_include_directories(MultiIndexer_test.exe AFTER PUBLIC include)
+
+
+  gaudi_add_executable(phihelper_test.exe
+    SOURCES tests/phihelper_test.cpp
+    LINK Boost::unit_test_framework
+    TEST)
+  target_include_directories(phihelper_test.exe AFTER PUBLIC include)
 endif()

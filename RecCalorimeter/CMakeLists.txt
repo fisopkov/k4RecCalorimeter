@@ -2,6 +2,8 @@
 # Package: RecCalorimeter
 ################################################################################
 
+find_package(boost_graph REQUIRED)
+
 file(GLOB _module_sources src/components/*.cpp )
 
 gaudi_add_module(k4RecCalorimeterPlugins
@@ -18,6 +20,7 @@ gaudi_add_module(k4RecCalorimeterPlugins
                       k4geo::detectorSegmentations
                       k4geo::detectorCommon
                       RecCaloCommon
+                      Boost::graph
                       ${FASTJET_LIBRARIES}
                       )
 
@@ -49,13 +52,16 @@ set_tests_properties(FCC_createTruthJets PROPERTIES FIXTURES_REQUIRED ALLEGRO_si
 
 add_test(NAME simulateSiPM
          COMMAND sh ${PROJECT_SOURCE_DIR}/RecCalorimeter/tests/scripts/testSiPM.sh
-         WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
+         WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/Testing/Temporary
 )
 set_test_env(simulateSiPM)
 
 
 gaudi_add_module(k4RecCalorimeterTests
-                 SOURCES tests/src/CaloCellConstantsSvcTestAlg.cpp
+                 SOURCES
+                   tests/src/CaloCellConstantsSvcTestAlg.cpp
+                   tests/src/CaloCellIndexerSvcTestAlg.cpp
+                   tests/src/ReadCaloCrosstalkMapTestAlg.cpp
                  LINK k4FWCore::k4FWCore
                       k4FWCore::k4Interface
                       Gaudi::GaudiKernel
@@ -66,6 +72,18 @@ add_test(NAME CaloCellConstantsSvc_test
          WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/Testing/Temporary
 )
 set_test_env(CaloCellConstantsSvc_test)
+
+add_test(NAME CaloCellIndexerSvc_test
+         COMMAND k4run ${PROJECT_SOURCE_DIR}/RecCalorimeter/tests/options/CaloCellIndexerSvc_test.py
+         WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/Testing/Temporary
+)
+set_test_env(CaloCellIndexerSvc_test)
+
+add_test(NAME ReadCaloCrosstalkMap_test
+         COMMAND k4run ${PROJECT_SOURCE_DIR}/RecCalorimeter/tests/options/ReadCaloCrosstalkMap_test.py
+         WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/Testing/Temporary
+)
+set_test_env(ReadCaloCrosstalkMap_test)
 
 
 #install(DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/tests/options DESTINATION ${CMAKE_INSTALL_DATADIR}/${CMAKE_PROJECT_NAME}/Reconstruction/RecCalorimeter)

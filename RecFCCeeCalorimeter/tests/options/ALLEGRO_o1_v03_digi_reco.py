@@ -218,6 +218,9 @@ logEWeightInPhotonID = False
 # resolved pi0 reconstruction by cluster pairing
 addPi0RecoTool = True
 
+# TRAPPIST pi0 / gamma ID
+runTRAPPIST = True
+
 #
 # ALGORITHMS AND SERVICES SETUP
 #
@@ -342,6 +345,46 @@ calibEcalEndcap = CalibrateInLayersTool(
     layerFieldName="layer",
 )
 
+# Indexing service.
+geotools = []
+from Configurables import TubeLayerModuleThetaCaloTool
+
+ecalBarrelGeometryTool = TubeLayerModuleThetaCaloTool(
+    "ecalBarrelGeometryTool",
+    readoutName=ecalBarrelReadoutName,
+    activeVolumeName="LAr_sensitive",
+    activeFieldName="layer",
+    activeVolumesNumber=ecalBarrelLayers,
+    fieldNames=["system"],
+    fieldValues=[IDs["ECAL_Barrel"]],
+    OutputLevel=INFO,
+)
+geotools += [ecalBarrelGeometryTool]
+
+from Configurables import TurbineEndcapCaloTool
+
+ecalEndcapGeometryTool = TurbineEndcapCaloTool(
+    "ecalEndcapGeometryTool", readoutName=ecalEndcapReadoutName
+)
+geotools += [ecalEndcapGeometryTool]
+
+if runHCal:
+    from Configurables import HCalPhiThetaCaloTool
+
+    hcalBarrelGeometryTool = HCalPhiThetaCaloTool(
+        "hcalBarrelGeometryTool", readoutName=hcalBarrelReadoutName
+    )
+    geotools += [hcalBarrelGeometryTool]
+    hcalEndcapGeometryTool = HCalPhiThetaCaloTool(
+        "hcalEndcapGeometryTool", readoutName=hcalEndcapReadoutName
+    )
+    geotools += [hcalEndcapGeometryTool]
+
+
+from Configurables import k4__recCalo__CaloCellIndexerSvc
+
+ExtSvc += [k4__recCalo__CaloCellIndexerSvc(GeoTools=geotools)]
+
 if runHCal:
     from Configurables import CalibrateCaloHitsTool
 
@@ -411,9 +454,9 @@ else:
 if addNoise:
     ecalBarrelNoisePath = "elecNoise_ecalBarrelFCCee_theta.root"
     ecalBarrelNoiseRMSHistName = "h_elecNoise_fcc_"
-    from Configurables import NoiseCaloCellsVsThetaFromFileTool
+    from Configurables import NoiseCaloCellsFromFileBarrelTool
 
-    ecalBarrelNoiseTool = NoiseCaloCellsVsThetaFromFileTool(
+    ecalBarrelNoiseTool = NoiseCaloCellsFromFileBarrelTool(
         "ecalBarrelNoiseTool",
         cellPositionsTool=cellPositionEcalBarrelToolForNoise,
         readoutName=ecalBarrelReadoutName,
@@ -424,7 +467,7 @@ if addNoise:
         addPileup=False,
         filterNoiseThreshold=1,
         useAbsInFilter=True,
-        numRadialLayers=ecalBarrelLayers,
+        numHistograms=ecalBarrelLayers,
         scaleFactor=1 / 1000.0,  # MeV to GeV
         OutputLevel=INFO,
     )
@@ -1042,6 +1085,37 @@ if doTopoClustering:
             TopAlg += [photonIDECalBarrelTopoClusters]
             finalClusters.remove(inClusters)
             finalClusters += [outClusters]
+
+    if runTRAPPIST:
+        if not addPi0RecoTool:
+            raise RuntimeError(
+                "TRAPPIST tool cannot be run if resolved pi0 reconstruction is not performed."
+            )
+
+        inClusters = Pi0RecoAlg.unpairedClusters.Path
+
+        from Configurables import TRAPPISTPi0PhotonInference
+
+        TRAPPISTInferenceAlg = TRAPPISTPi0PhotonInference(
+            "TRAPPIST" + outClusters,
+            inClusters=[inClusters],
+            outClusters=[inClusters + "WithScore"],
+            ONNXModelPath="TRAPPIST_topoclustering.onnx",
+            OutputLevel=INFO,
+        )
+
+        from Configurables import ClusterPi0PhotonID
+
+        Pi0PhotonIDAlg = ClusterPi0PhotonID(
+            "IdentifiedPi0TRAPPISTScore",
+            inClusters=TRAPPISTInferenceAlg.outClusters,
+            outParticles=["TRAPPISTParticles"],
+            Threshold=0.5,
+            OutputLevel=INFO,
+        )
+
+        TopAlg += [TRAPPISTInferenceAlg]
+        TopAlg += [Pi0PhotonIDAlg]
 
     # ECAL + HCAL
     if runHCal:
