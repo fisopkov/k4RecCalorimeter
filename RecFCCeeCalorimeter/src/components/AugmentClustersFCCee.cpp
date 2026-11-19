@@ -22,6 +22,7 @@
 #include "TVector3.h"
 #include <edm4hep/Constants.h>
 #include <Eigen/Dense>
+#include <TMatrixDSymEigen.h>
 
 DECLARE_COMPONENT(AugmentClustersFCCee)
 
@@ -153,12 +154,12 @@ StatusCode AugmentClustersFCCee::initialize() {
   }
   showerShapeDecorations.push_back("mass");   // cluster invariant mass assuming massless constituents
   showerShapeDecorations.push_back("ncells"); // number of cells in cluster with E>0
-  showerShapeDecorations.push_back("shower_center_x");        // fs
-  showerShapeDecorations.push_back("shower_center_y");          // fs
-  showerShapeDecorations.push_back("shower_center_z");        // fs
-  showerShapeDecorations.push_back("principal_axis_x");      // fs
-  showerShapeDecorations.push_back("principal_axis_y");      // fs
-  showerShapeDecorations.push_back("principal_axis_z");      // fs
+  //showerShapeDecorations.push_back("shower_center_x");        // fs
+  //showerShapeDecorations.push_back("shower_center_y");          // fs
+  //showerShapeDecorations.push_back("shower_center_z");        // fs
+  //showerShapeDecorations.push_back("principal_axis_x");      // fs
+  //showerShapeDecorations.push_back("principal_axis_y");      // fs
+  //showerShapeDecorations.push_back("principal_axis_z");      // fs
 
   k4FWCore::putCollectionParameter(m_outClusters.objKey(), edm4hep::labels::ShapeParameterNames, showerShapeDecorations,
                                    this);
@@ -220,7 +221,7 @@ StatusCode AugmentClustersFCCee::execute([[maybe_unused]] const EventContext& ev
     // clone original cluster
     auto newCluster = cluster.clone();
     outClusters->push_back(newCluster);
-    std::cout << "  Cluster with energy " << cluster.getEnergy() << " and " << cluster.hits_size() << " cells." << std::endl;
+    //std::cout << "  Cluster with energy " << cluster.getEnergy() << " and " << cluster.hits_size() << " cells." << std::endl;
 
     
     // loop over all cells to:
@@ -239,8 +240,8 @@ StatusCode AugmentClustersFCCee::execute([[maybe_unused]] const EventContext& ev
     std::vector<double> v3clW(3, 0.0); //fs
     
     
-    Eigen::Matrix3d C = Eigen::Matrix3d::Zero();
-    Eigen::Vector3d prAxis = Eigen::Vector3d::Zero();
+    //Eigen::Matrix3d C = Eigen::Matrix3d::Zero();
+    //Eigen::Vector3d prAxis = Eigen::Vector3d::Zero();
 
     double phiMin = 9999.;
     double phiMax = -9999.;
@@ -283,9 +284,9 @@ StatusCode AugmentClustersFCCee::execute([[maybe_unused]] const EventContext& ev
         // compute phi of cell to determine min/max phi of cluster
         TVector3 v = TVector3(cell->getPosition().x, cell->getPosition().y, cell->getPosition().z);
 
-        v3clW[0] += cell->getPosition().x * eCell;  //fs
-        v3clW[1] += cell->getPosition().y * eCell;  //fs
-        v3clW[2] += cell->getPosition().z * eCell;  //fs
+        //v3clW[0] += cell->getPosition().x * eCell;  //fs
+        //v3clW[1] += cell->getPosition().y * eCell;  //fs
+        //v3clW[2] += cell->getPosition().z * eCell;  //fs
         double phi = v.Phi();
         if (phi < phiMin)
           phiMin = phi;
@@ -309,7 +310,7 @@ StatusCode AugmentClustersFCCee::execute([[maybe_unused]] const EventContext& ev
       } // end of loop over cells
     } // end of loop over system / readout
 
-
+    /*
     v3clW[0] /= E; //fs
     v3clW[1] /= E; //fs
     v3clW[2] /= E; //fs
@@ -318,10 +319,10 @@ StatusCode AugmentClustersFCCee::execute([[maybe_unused]] const EventContext& ev
     
     double w = 0;
     Eigen::Vector3d showerAxis(v3clW[0], v3clW[1], v3clW[2]);
-    std::cout << "    (1) Shower Axis : " <<showerAxis[0] << " " << showerAxis[1] << " " << showerAxis[2] << std::endl;
+    //std::cout << "    (1) Shower Axis : " <<showerAxis[0] << " " << showerAxis[1] << " " << showerAxis[2] << std::endl;
     //dd4hep::DDSegmentation::setMag(showerAxis,1.0);
     showerAxis.normalize();
-    std::cout << "    (1.1) Shower Axis : " <<showerAxis[0] << " " << showerAxis[1] << " " << showerAxis[2] << std::endl;
+    //std::cout << "    (1.1) Shower Axis : " <<showerAxis[0] << " " << showerAxis[1] << " " << showerAxis[2] << std::endl;
     double deltaPhi = 0.;
     double deltaTheta = 0.;
     double angle = 0.;
@@ -361,7 +362,7 @@ StatusCode AugmentClustersFCCee::execute([[maybe_unused]] const EventContext& ev
          
            //prAxis(showerAxis);
            prAxis = showerAxis;
-           std::cout << "    principal Axis : " <<prAxis[0] << " " << prAxis[1] << " " << prAxis[2] << std::endl;
+           //std::cout << "    principal Axis : " <<prAxis[0] << " " << prAxis[1] << " " << prAxis[2] << std::endl;
            int iEigen = -1;
            
            for (int i=0;i<3;i++) {
@@ -380,7 +381,7 @@ StatusCode AugmentClustersFCCee::execute([[maybe_unused]] const EventContext& ev
                 iEigen = i;
                 angle = tmpAngle;
                 prAxis = tmpAxis;
-                std::cout << "iEigen : " << iEigen << "  angle : " << tmpAngle*(1./dd4hep::deg) <<  "   prAxis: " << prAxis[0] << " " << prAxis[1] << " " << prAxis[2] << std::endl;
+                //std::cout << "iEigen : " << iEigen << "  angle : " << tmpAngle*(1./dd4hep::deg) <<  "   prAxis: " << prAxis[0] << " " << prAxis[1] << " " << prAxis[2] << std::endl;
               }
            }//end for loop     
          
@@ -394,34 +395,36 @@ StatusCode AugmentClustersFCCee::execute([[maybe_unused]] const EventContext& ev
            // deltaTheta = showerAxis.theta() - prAxis.theta();
            deltaTheta = std::acos(showerAxis.normalized().z()) - std::acos(prAxis.normalized().z());
          
-           std::cout << "   deltaTheta (deg) : " << deltaTheta*(1./dd4hep::deg) << std::endl;
-           std::cout << "   deltaPhi (deg) : " << deltaPhi*(1./dd4hep::deg) << std::endl;
+           //std::cout << "   deltaTheta (deg) : " << deltaTheta*(1./dd4hep::deg) << std::endl;
+           //std::cout << "   deltaPhi (deg) : " << deltaPhi*(1./dd4hep::deg) << std::endl;
            // check the angle
            
            if ( angle < m_maxAxisAngle ) {
               showerAxis = prAxis;
-              std::cout << "    principal Direction (" << prAxis[0] << ", " 
-                   << prAxis[1] << ", " << prAxis[2] << ") deviates LESS than " << m_maxAxisAngle*(1./dd4hep::deg)
-                   << " deg from IP-to-ClusterCenter-axis (" << showerAxis[0] << ", "
-                   << showerAxis[1] << ", " << showerAxis[2] << ")"
-                  <<std::endl;
+              //std::cout << "    principal Direction (" << prAxis[0] << ", " 
+              //     << prAxis[1] << ", " << prAxis[2] << ") deviates LESS than " << m_maxAxisAngle*(1./dd4hep::deg)
+              //     << " deg from IP-to-ClusterCenter-axis (" << showerAxis[0] << ", "
+              //     << showerAxis[1] << ", " << showerAxis[2] << ")"
+              //    <<std::endl;
            }
-           else 
+           //else 
                   //ATH_MSG_DEBUG("principal Direction (" << prAxis[Amg::x] << ", " 
                    //<< prAxis[Amg::y] << ", " << prAxis[Amg::z] << ") deviates more than " 
                   // << m_maxAxisAngle*(1./deg) 
                    //<< " deg from IP-to-ClusterCenter-axis (" << showerAxis[Amg::x] << ", "
                    //<< showerAxis[Amg::y] << ", " << showerAxis[Amg::z] << ")");
-                   std::cout << "     principal Direction (" << prAxis[0] << ", " 
-                   << prAxis[1] << ", " << prAxis[2] << ") deviates MORE than " << m_maxAxisAngle*(1./dd4hep::deg)
-                   << " deg from IP-to-ClusterCenter-axis (" << showerAxis[0] << ", "
-                   << showerAxis[1] << ", " << showerAxis[2] << ")"
-                  <<std::endl;
+                   //std::cout << "     principal Direction (" << prAxis[0] << ", " 
+                   //<< prAxis[1] << ", " << prAxis[2] << ") deviates MORE than " << m_maxAxisAngle*(1./dd4hep::deg)
+                   //<< " deg from IP-to-ClusterCenter-axis (" << showerAxis[0] << ", "
+                   //<< showerAxis[1] << ", " << showerAxis[2] << ")"
+                  // <<std::endl;
          }//end if std::abs(S)<epsilon
          //else {
            //ATH_MSG_DEBUG("Eigenvalues close to 0, do not use principal axis");
          //}
        }//end got eigenvalues else
+
+    */
 
     // any number close to two pi should do, because if a cluster contains
     // the -pi<->pi transition, phiMin should be close to -pi and phiMax close to pi
@@ -1106,12 +1109,12 @@ StatusCode AugmentClustersFCCee::execute([[maybe_unused]] const EventContext& ev
     } // end of loop over system/readout
     newCluster.addToShapeParameters(p4cl.M());
     newCluster.addToShapeParameters(nCells);
-    newCluster.addToShapeParameters(showerCenter[0]);
-    newCluster.addToShapeParameters(showerCenter[1]);
-    newCluster.addToShapeParameters(showerCenter[2]);
-    newCluster.addToShapeParameters(prAxis[0]);
-    newCluster.addToShapeParameters(prAxis[1]);
-    newCluster.addToShapeParameters(prAxis[2]);
+    //newCluster.addToShapeParameters(showerCenter[0]);
+    //newCluster.addToShapeParameters(showerCenter[1]);
+    //newCluster.addToShapeParameters(showerCenter[2]);
+    //newCluster.addToShapeParameters(prAxis[0]);
+    //newCluster.addToShapeParameters(prAxis[1]);
+    //newCluster.addToShapeParameters(prAxis[2]);
 
   } // end of loop over clusters
 

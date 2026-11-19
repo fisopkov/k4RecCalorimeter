@@ -3,6 +3,7 @@
 ################################################################################
 
 file(GLOB _module_sources src/components/*.cpp)
+find_package(Eigen3 REQUIRED)
 gaudi_add_module(k4RecFCCeeCalorimeterPlugins
                  SOURCES ${_module_sources}
                  LINK k4FWCore::k4FWCore
@@ -18,6 +19,8 @@ gaudi_add_module(k4RecFCCeeCalorimeterPlugins
                       ROOT::Hist
                       onnxruntime::onnxruntime
                       nlohmann_json::nlohmann_json
+                      RecCaloCommon
+                      Eigen3::Eigen
                       )
 install(TARGETS k4RecFCCeeCalorimeterPlugins
   EXPORT k4RecCalorimeterTargets
